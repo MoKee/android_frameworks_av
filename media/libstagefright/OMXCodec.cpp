@@ -357,6 +357,12 @@ uint32_t OMXCodec::getComponentQuirks(
                 index, "supports-multiple-frames-per-input-buffer")) {
         quirks |= kSupportsMultipleFramesPerInputBuffer;
     }
+#ifdef HTC_3D_SUPPORT
+    if (list->codecHasQuirk(
+                index, "requires-larger-encoder-output-buffer")) {
+        quirks |= kRequiresLargerEncoderOutputBuffer;
+    }
+#endif
     if (list->codecHasQuirk(
                 index, "requires-allocate-on-input-ports")) {
         quirks |= kRequiresAllocateBufferOnInputPorts;

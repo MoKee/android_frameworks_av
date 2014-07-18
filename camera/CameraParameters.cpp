@@ -40,10 +40,39 @@ const char CameraParameters::KEY_PREVIEW_FRAME_RATE_MODE[] = "preview-frame-rate
 const char CameraParameters::KEY_SUPPORTED_PREVIEW_FRAME_RATE_MODES[] = "preview-frame-rate-modes";
 const char CameraParameters::KEY_PREVIEW_FRAME_RATE_AUTO_MODE[] = "frame-rate-auto";
 const char CameraParameters::KEY_PREVIEW_FRAME_RATE_FIXED_MODE[] = "frame-rate-fixed";
+#ifdef QCOM_LEGACY_CAM_PARAMS
+//Values for Continuous AF
+const char CameraParameters::CAF_OFF[] = "caf-off";
+const char CameraParameters::CAF_ON[] = "caf-on";
+//Same, for CodeAurora-based blobs
+const char CameraParameters::CAPTURE_MODE_NORMAL[] = "normal";
+const char CameraParameters::CAPTURE_MODE_BURST[] = "burst";
+const char CameraParameters::CAPTURE_MODE_CONTI_BURST[] = "contiburst";
+const char CameraParameters::CAPTURE_MODE_HDR[] = "hdr";
+const char CameraParameters::CAPTURE_MODE_HJR[] = "hjr";
+const char CameraParameters::CAPTURE_MODE_PANORAMA[] = "panorama";
+const char CameraParameters::CONTINUOUS_AF_OFF[] = "caf-off";
+const char CameraParameters::CONTINUOUS_AF_ON[] = "caf-on";
+const char CameraParameters::KEY_CONTINUOUS_AF[] = "continuous-af";
+const char CameraParameters::KEY_CAF[] = "continuous-af";
+const char CameraParameters::KEY_CAPTURE_MODE[] = "capture-mode";
+const char CameraParameters::KEY_PICTURE_COUNT[] = "picture-count";
+const char CameraParameters::KEY_MAX_BURST_PICTURE_COUNT[] = "max-burst-picture-count";
+const char CameraParameters::KEY_SUPPORTED_CONTINUOUS_AF[] = "continuous-af-mode";
+const char CameraParameters::KEY_SUPPORTED_CAF[] = "continuous-af-values";
+const char CameraParameters::KEY_SUPPORTED_CAPTURE_MODES[] = "capture-mode-values";
+const char CameraParameters::KEY_TAKING_PICTURE_ZOOM[] = "taking-picture-zoom";
+const char CameraParameters::KEY_PANORAMA_MODE[] = "panorama-mode";
+const char CameraParameters::PANORAMA_MODE_NOT_INPROGRESS[] = "not-in-progress";
+const char CameraParameters::PANORAMA_MODE_INPROGRESS[] = "in-progress";
+#endif
 #endif
 const char CameraParameters::KEY_PICTURE_SIZE[] = "picture-size";
 const char CameraParameters::KEY_SUPPORTED_PICTURE_SIZES[] = "picture-size-values";
 const char CameraParameters::KEY_PICTURE_FORMAT[] = "picture-format";
+#ifdef HTC_3D_SUPPORT
+const char CameraParameters::KEY_SUPPORTED_3D_FILE_FORMAT[] = "3d-file-format";
+#endif
 const char CameraParameters::KEY_SUPPORTED_PICTURE_FORMATS[] = "picture-format-values";
 const char CameraParameters::KEY_JPEG_THUMBNAIL_WIDTH[] = "jpeg-thumbnail-width";
 const char CameraParameters::KEY_JPEG_THUMBNAIL_HEIGHT[] = "jpeg-thumbnail-height";
@@ -380,6 +409,9 @@ const char CameraParameters::FOCUS_MODE_CONTINUOUS_PICTURE[] = "continuous-pictu
 const char CameraParameters::FOCUS_MODE_MANUAL_POSITION[] = "manual";
 #endif
 #if defined(QCOM_HARDWARE)
+#ifdef QCOM_LEGACY_CAM_PARAMS
+const char CameraParameters::FOCUS_MODE_CONTINUOUS_CAMERA[] = "continuous-camera";
+#endif
 const char CameraParameters::FOCUS_MODE_NORMAL[] = "normal";
 
 
@@ -423,11 +455,26 @@ const char CameraParameters::SKIN_TONE_ENHANCEMENT_ENABLE[] = "enable";
 const char CameraParameters::SKIN_TONE_ENHANCEMENT_DISABLE[] = "disable";
 
 const char CameraParameters::KEY_SHARPNESS[] = "sharpness";
+#ifdef QCOM_LEGACY_CAM_PARAMS
+const char CameraParameters::KEY_MAX_SHARPNESS[] = "sharpness-max";
+const char CameraParameters::KEY_MIN_SHARPNESS[] = "sharpness-min";
+#else
 const char CameraParameters::KEY_MAX_SHARPNESS[] = "max-sharpness";
+#endif
 const char CameraParameters::KEY_CONTRAST[] = "contrast";
+#ifdef QCOM_LEGACY_CAM_PARAMS
+const char CameraParameters::KEY_MAX_CONTRAST[] = "contrast-max";
+const char CameraParameters::KEY_MIN_CONTRAST[] = "contrast-min";
+#else
 const char CameraParameters::KEY_MAX_CONTRAST[] = "max-contrast";
+#endif
 const char CameraParameters::KEY_SATURATION[] = "saturation";
+#ifdef QCOM_LEGACY_CAM_PARAMS
+const char CameraParameters::KEY_MAX_SATURATION[] = "saturation-max";
+const char CameraParameters::KEY_MIN_SATURATION[] = "saturation-min";
+#else
 const char CameraParameters::KEY_MAX_SATURATION[] = "max-saturation";
+#endif
 
 //Values for DENOISE
 const char CameraParameters::DENOISE_OFF[] = "denoise-off";
@@ -441,7 +488,10 @@ const char CameraParameters::SELECTABLE_ZONE_AF_FRAME_AVERAGE[] = "frame-average
 // Values for Face Detection settings.
 const char CameraParameters::FACE_DETECTION_OFF[] = "off";
 const char CameraParameters::FACE_DETECTION_ON[] = "on";
-
+#ifdef QCOM_LEGACY_CAM_PARAMS
+const char CameraParameters::FILE_FORMAT_MPO[] = "mpo";
+const char CameraParameters::FILE_FORMAT_JPS[] = "jps";
+#endif
 // Values for MCE settings.
 const char CameraParameters::MCE_ENABLE[] = "enable";
 const char CameraParameters::MCE_DISABLE[] = "disable";
@@ -764,6 +814,14 @@ void CameraParameters::getSupportedPreviewSizes(Vector<Size> &sizes) const
 }
 
 #ifdef QCOM_HARDWARE
+
+#ifdef QCOM_LEGACY_CAM_PARAMS
+void CameraParameters::setPostviewSize(int width, int height)
+{
+    // dummy
+}
+#endif
+
 void CameraParameters::getSupportedHfrSizes(Vector<Size> &sizes) const
 {
     const char *hfrSizesStr = get(KEY_SUPPORTED_HFR_SIZES);
@@ -869,6 +927,13 @@ void CameraParameters::getSupportedPictureSizes(Vector<Size> &sizes) const
     const char *pictureSizesStr = get(KEY_SUPPORTED_PICTURE_SIZES);
     parseSizesList(pictureSizesStr, sizes);
 }
+
+#ifdef HTC_3D_SUPPORT
+void CameraParameters::set3DFileFormat(const char *format)
+{
+    set(KEY_SUPPORTED_3D_FILE_FORMAT, format);
+}
+#endif
 
 void CameraParameters::setPictureFormat(const char *format)
 {
