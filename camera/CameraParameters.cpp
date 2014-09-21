@@ -310,6 +310,9 @@ const char CameraParameters::WHITE_BALANCE_SHADE[] = "shade";
 #ifdef QCOM_HARDWARE
 const char CameraParameters::WHITE_BALANCE_MANUAL_CCT[] = "manual-cct";
 #endif
+#ifdef ARMANI_CAMERA_HARDWARE
+const char CameraParameters::KEY_CAMERA_SERVICE_MUTE[] = "camera-service-mute";
+#endif
 
 // Values for effect settings.
 const char CameraParameters::EFFECT_NONE[] = "none";

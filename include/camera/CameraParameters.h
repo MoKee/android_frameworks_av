@@ -809,6 +809,9 @@ public:
 #ifdef QCOM_HARDWARE
     static const char WHITE_BALANCE_MANUAL_CCT[];
 #endif
+#ifdef ARMANI_CAMERA_HARDWARE
+    static const char KEY_CAMERA_SERVICE_MUTE[];
+#endif
 
     // Values for effect settings.
     static const char EFFECT_NONE[];
