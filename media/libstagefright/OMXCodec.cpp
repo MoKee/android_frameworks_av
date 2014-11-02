@@ -804,8 +804,14 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
         CHECK(meta->findInt32(kKeyChannelCount, &numChannels));
         CHECK(meta->findInt32(kKeySampleRate, &sampleRate));
 
-        if (!meta->findInt32(kKeyAACProfile, &aacProfile)) {
+        if (!meta->findInt32(kKeyAACAOT, &aacProfile)) {
             aacProfile = OMX_AUDIO_AACObjectNull;
+        }
+
+        // Google's AAC decoder can't handle MAIN profile
+        if (!strncmp(mComponentName, "OMX.google.", 11) &&
+                aacProfile == OMX_AUDIO_AACObjectMain) {
+            return ERROR_UNSUPPORTED;
         }
 
         int32_t isADTS;
@@ -893,12 +899,6 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
                 CODEC_LOGE("setAC3Format() failed (err = %d)", err);
                 return err;
             }
-#ifdef ENABLE_AV_ENHANCEMENTS
-            // FFMPEG will convert floating point to 24-bit PCM
-            if (ExtendedUtils::isHiresAudioEnabled()) {
-                meta->setInt32(kKeySampleBits, 24);
-            }
-#endif
         } else if (!strcasecmp(MEDIA_MIMETYPE_AUDIO_APE, mMIME))  {
             status_t err = setAPEFormat(meta);
             if (err != OK) {
@@ -911,12 +911,6 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
                 CODEC_LOGE("setDTSFormat() failed (err = %d)", err);
                 return err;
             }
-#ifdef ENABLE_AV_ENHANCEMENTS
-            // FFMPEG will convert DTS floating point to 24-bit PCM
-            if (ExtendedUtils::isHiresAudioEnabled()) {
-                meta->setInt32(kKeySampleBits, 24);
-            }
-#endif
         } else if (!strcasecmp(MEDIA_MIMETYPE_AUDIO_FFMPEG, mMIME))  {
             status_t err = setFFmpegAudioFormat(meta);
             if (err != OK) {
@@ -924,6 +918,8 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
                 return err;
             }
         }
+        getPCMOutputFormat(meta);
+        meta->dumpToLog();
 #ifdef QCOM_HARDWARE
     } else {
         if (!mIsVideo && mIsEncoder) {
@@ -2432,12 +2428,23 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
         return err;
     }
 
+#ifdef QCOM_HARDWARE
+    // Add extra buffer to display queue to get around dequeue+wait
+    // blocking too long in case BufferQueue is in sync-mode and advertises
+    // only 1 buffer. Also, restrict to 2 extra buffers for > 1080p
+    minUndequeuedBufs +=
+        (def.format.video.nFrameWidth * def.format.video.nFrameHeight > 1088 * 1920)
+        ? 2 : 3;
+    ALOGI("NOTE: Overriding minUndequeuedBufs to %d",minUndequeuedBufs);
+#endif
+
     // XXX: Is this the right logic to use?  It's not clear to me what the OMX
     // buffer counts refer to - how do they account for the renderer holding on
     // to buffers?
     if (def.nBufferCountActual < def.nBufferCountMin + minUndequeuedBufs) {
         OMX_U32 newBufferCount = def.nBufferCountMin + minUndequeuedBufs;
         def.nBufferCountActual = newBufferCount;
+        ALOGI("NOTE: Allocating %lu buffers on output port",def.nBufferCountActual);
         err = mOMX->setParameter(
                 mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
         if (err != OK) {
@@ -4393,6 +4400,28 @@ status_t OMXCodec::setFFmpegVideoFormat(const sp<MetaData> &meta)
     return err;
 }
 
+status_t OMXCodec::getPCMOutputFormat(const sp<MetaData> &meta)
+{
+    int32_t bitsPerSample = 16;
+    status_t err = OK;
+
+    OMX_AUDIO_PARAM_PCMMODETYPE params;
+    InitOMXParams(&params);
+    params.nPortIndex = kPortIndexOutput;
+
+    err = mOMX->getParameter(
+            mNode, OMX_IndexParamAudioPcm, &params, sizeof(params));
+
+    if (err == OK) {
+        ALOGI("  nSamplingRate = %ld\n", params.nSamplingRate);
+        ALOGI("  nChannels = %ld\n", params.nChannels);
+        ALOGI("  nBitPerSample = %ld\n", params.nBitPerSample);
+
+        meta->setInt32(kKeySampleBits, params.nBitPerSample);
+    }
+    return err;
+}
+
 //audio
 status_t OMXCodec::setMP3Format(const sp<MetaData> &meta)
 {
@@ -4460,7 +4489,13 @@ status_t OMXCodec::setWMAFormat(const sp<MetaData> &meta)
     CHECK(meta->findInt32(kKeyChannelCount, &numChannels));
     CHECK(meta->findInt32(kKeySampleRate, &sampleRate));
     CHECK(meta->findInt32(kKeyBitRate, &bitRate));
-    CHECK(meta->findInt32(kKeyBlockAlign, &blockAlign));
+    if (!meta->findInt32(kKeyBlockAlign, &blockAlign)) {
+        // we should be last on the codec list, but another sniffer may
+        // have handled it and there is no hardware codec.
+        if (!meta->findInt32(kKeyWMABlockAlign, &blockAlign)) {
+            return ERROR_UNSUPPORTED;
+        }
+    }
 
     CODEC_LOGV("Channels: %d, SampleRate: %d, BitRate: %d, blockAlign: %d",
             numChannels, sampleRate, bitRate, blockAlign);
@@ -5849,7 +5884,7 @@ void OMXCodec::initOutputFormat(const sp<MetaData> &inputFormat) {
                 CHECK_EQ(err, (status_t)OK);
 
                 CHECK_EQ((int)params.eNumData, (int)OMX_NumericalDataSigned);
-                CHECK_EQ(params.nBitPerSample, 16u);
+                //CHECK_EQ(params.nBitPerSample, 16u);
                 CHECK_EQ((int)params.ePCMMode, (int)OMX_AUDIO_PCMModeLinear);
 
                 int32_t numChannels, sampleRate;
