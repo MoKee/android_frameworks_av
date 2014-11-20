@@ -249,7 +249,7 @@ void OMXCodec::findMatchingCodecs(
     size_t index = 0;
 
 #ifdef ENABLE_AV_ENHANCEMENTS
-    //Check if application specially reuqested for aac hardware encoder/decoder
+    //Check if application specially reuqested for  aac hardware encoder
     //This is not a part of  mediacodec list
     if (matchComponentName &&
             !strncmp("OMX.qcom.audio.encoder.aac", matchComponentName, 26)) {
@@ -258,17 +258,6 @@ void OMXCodec::findMatchingCodecs(
         CodecNameAndQuirks *entry = &matchingCodecs->editItemAt(index);
         entry->mName = String8("OMX.qcom.audio.encoder.aac");
         entry->mQuirks = 0;
-        return;
-    }
-
-    if (matchComponentName &&
-            !strncmp("OMX.qcom.audio.decoder.multiaac", matchComponentName, 31)) {
-        matchingCodecs->add();
-
-        CodecNameAndQuirks *entry = &matchingCodecs->editItemAt(index);
-        entry->mName = String8("OMX.qcom.audio.decoder.multiaac");
-        entry->mQuirks |= kRequiresAllocateBufferOnInputPorts;
-        entry->mQuirks |= kRequiresAllocateBufferOnOutputPorts;
         return;
     }
 #endif
@@ -334,9 +323,6 @@ uint32_t OMXCodec::getComponentQuirks(
     if (info->hasQuirk("requires-global-flush")) {
         quirks |= kRequiresGlobalFlush;
     }
-    if (info->hasQuirk("defers-output-buffer-allocation")) {
-        quirks |= kDefersOutputBufferAllocation;
-    }
 
     quirks |= ExtendedCodec::getComponentQuirks(info);
 
@@ -364,17 +350,6 @@ bool OMXCodec::findCodecQuirks(const char *componentName, uint32_t *quirks) {
     if (index < 0) {
         return false;
     }
-
-#ifdef ENABLE_AV_ENHANCEMENTS
-    //Check for aac hardware decoder
-    //This is not a part of  mediacodec list
-    if (componentName &&
-            !strncmp("OMX.qcom.audio.decoder.multiaac", componentName, 31)) {
-        *quirks |= kRequiresAllocateBufferOnInputPorts;
-        *quirks |= kRequiresAllocateBufferOnOutputPorts;
-        return true;
-    }
-#endif
 
     const sp<MediaCodecInfo> info = list->getCodecInfo(index);
     CHECK(info != NULL);
@@ -405,15 +380,8 @@ sp<MediaSource> OMXCodec::Create(
     CHECK(success);
 
     Vector<CodecNameAndQuirks> matchingCodecs;
-
-    if (!strncmp(mime, MEDIA_MIMETYPE_AUDIO_AAC, 15) &&
-            ExtendedUtils::UseQCHWAACDecoder(mime)) {
-        findMatchingCodecs(mime, createEncoder,
-            "OMX.qcom.audio.decoder.multiaac", flags, &matchingCodecs);
-    } else {
-        findMatchingCodecs(
+    findMatchingCodecs(
             mime, createEncoder, matchComponentName, flags, &matchingCodecs);
-    }
 
     if (matchingCodecs.isEmpty()) {
         ALOGV("No matching codecs! (mime: %s, createEncoder: %s, "
@@ -5085,9 +5053,13 @@ status_t OMXCodec::pause() {
 status_t OMXCodec::resumeLocked(bool drainInputBuf) {
    CODEC_LOGV("resume mState=%d", mState);
 
-   if (!strncmp(mComponentName, "OMX.qcom.", 9)) {
+   if (!strncmp(mComponentName, "OMX.qcom.", 9) && mPaused) {
         while (isIntermediateState(mState)) {
             mAsyncCompletion.wait(mLock);
+        }
+        if (mState == (status_t)EXECUTING) {
+            CODEC_LOGI("in EXECUTING state, return OK");
+            return OK;
         }
         CHECK_EQ(mState, (status_t)PAUSED);
         status_t err = mOMX->sendCommand(mNode,
