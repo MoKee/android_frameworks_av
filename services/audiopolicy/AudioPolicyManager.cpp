@@ -269,6 +269,7 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
                                                   const char *device_address)
 {
     String8 address = (device_address == NULL) ? String8("") : String8(device_address);
+    AudioParameter param;
 
     ALOGV("setDeviceConnectionState() device: %x, state %d, address %s",
             device, state, address.string());
@@ -350,6 +351,13 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
                     "checkOutputsForDevice() returned no outputs but status OK");
             ALOGV("setDeviceConnectionState() checkOutputsForDevice() returned %zu outputs",
                   outputs.size());
+
+
+            // Set connect to HALs
+            param = AudioParameter(address);
+            param.addInt(String8(AUDIO_PARAMETER_DEVICE_CONNECT), device);
+            mpClientInterface->setParameters(AUDIO_IO_HANDLE_NONE, param.toString());
+
             break;
         // handle output device disconnection
         case AUDIO_POLICY_DEVICE_STATE_UNAVAILABLE: {
@@ -370,7 +378,7 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
             ALOGV("setDeviceConnectionState() disconnecting output device %x", device);
 
             // Set Disconnect to HALs
-            AudioParameter param = AudioParameter(address);
+            param = AudioParameter(address);
             param.addInt(String8(AUDIO_PARAMETER_DEVICE_DISCONNECT), device);
             mpClientInterface->setParameters(AUDIO_IO_HANDLE_NONE, param.toString());
 
@@ -493,6 +501,12 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
             } else {
                 return NO_MEMORY;
             }
+
+            // Set connect to HALs
+            param = AudioParameter(address);
+            param.addInt(String8(AUDIO_PARAMETER_DEVICE_CONNECT), device);
+            mpClientInterface->setParameters(AUDIO_IO_HANDLE_NONE, param.toString());
+
         } break;
 
         // handle input device disconnection
@@ -505,7 +519,7 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
             ALOGV("setDeviceConnectionState() disconnecting input device %x", device);
 
             // Set Disconnect to HALs
-            AudioParameter param = AudioParameter(address);
+            param = AudioParameter(address);
             param.addInt(String8(AUDIO_PARAMETER_DEVICE_DISCONNECT), device);
             mpClientInterface->setParameters(AUDIO_IO_HANDLE_NONE, param.toString());
 
@@ -1272,11 +1286,20 @@ audio_io_handle_t AudioPolicyManager::getOutputForDevice(
     }
 #endif
 
-#ifdef WFD_CONCURRENCY
+#ifdef AUDIO_EXTN_AFE_PROXY_ENABLED
+    /*
+    * WFD audio routes back to target speaker when starting a ringtone playback.
+    * This is because primary output is reused for ringtone, so output device is
+    * updated based on SONIFICATION strategy for both ringtone and music playback.
+    * The same issue is not seen on remoted_submix HAL based WFD audio because
+    * primary output is not reused and a new output is created for ringtone playback.
+    * Issue is fixed by updating output flag to AUDIO_OUTPUT_FLAG_FAST when there is
+    * a non-music stream playback on WFD, so primary output is not reused for ringtone.
+    */
     audio_devices_t availableOutputDeviceTypes = mAvailableOutputDevices.types();
     if ((availableOutputDeviceTypes & AUDIO_DEVICE_OUT_PROXY)
           && (stream != AUDIO_STREAM_MUSIC)) {
-        ALOGD(" WFD mode adding ULL flags for non music stream.. flags: %x ", flags );
+        ALOGD("WFD audio: use OUTPUT_FLAG_FAST for non music stream. flags:%x", flags );
         //For voip paths
         if(flags & AUDIO_OUTPUT_FLAG_DIRECT)
             flags = AUDIO_OUTPUT_FLAG_DIRECT;
@@ -2632,6 +2655,17 @@ return false;
     // This may prevent offloading in rare situations where effects are left active by apps
     // in the background.
     if (isNonOffloadableEffectEnabled()) {
+        return false;
+    }
+
+    // Check for soundcard status
+    String8 valueStr = mpClientInterface->getParameters((audio_io_handle_t)0,
+                                String8("SND_CARD_STATUS"));
+    AudioParameter result = AudioParameter(valueStr);
+    int isonline = 0;
+    if ((result.getInt(String8("SND_CARD_STATUS"), isonline) == NO_ERROR)
+           && !isonline) {
+        ALOGD("copl: soundcard is offline rejecting offload request");
         return false;
     }
 
