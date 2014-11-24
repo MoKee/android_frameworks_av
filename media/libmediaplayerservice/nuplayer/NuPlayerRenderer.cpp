@@ -597,8 +597,23 @@ size_t NuPlayer::Renderer::fillAudioBuffer(void *buffer, size_t size) {
 
 bool NuPlayer::Renderer::onDrainAudioQueue() {
     uint32_t numFramesPlayed;
-    if (mAudioSink->getPosition(&numFramesPlayed) != OK) {
-        return false;
+    status_t positionStatus = mAudioSink->getPosition(&numFramesPlayed);
+    if (positionStatus == NO_INIT) {
+        // The AudioSink track may not have been created yet, which returns NO_INIT.
+        // Check if EOS has been reached and call notifyEOS, so that this message
+        // is not lost before this funtion returns false below.
+        if (!mAudioQueue.empty()) {
+            QueueEntry *firstEntry = &*mAudioQueue.begin();
+            if (firstEntry->mBuffer == NULL) {
+                // EOS is reached
+                notifyEOS(true /*audio */, firstEntry->mFinalResult);
+                mAudioQueue.erase(mAudioQueue.begin());
+            }
+            firstEntry = NULL;
+         }
+         return false;
+    } else if (positionStatus != OK) {
+               return false;
     }
 
     ssize_t numFramesAvailableToWrite =
@@ -1351,6 +1366,11 @@ bool NuPlayer::Renderer::onOpenAudioSink(
                     "audio_format", mime.c_str());
             onDisableOffloadAudio();
         } else {
+#ifdef PCM_OFFLOAD_ENABLED
+            if (audio_is_linear_pcm(audioFormat) || audio_is_offload_pcm(audioFormat)) {
+                audioFormat = AUDIO_FORMAT_PCM_16_BIT_OFFLOAD;
+            }
+#endif
             ALOGV("Mime \"%s\" mapped to audio_format 0x%x",
                     mime.c_str(), audioFormat);
 

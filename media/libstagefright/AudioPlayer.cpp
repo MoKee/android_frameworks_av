@@ -113,7 +113,6 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
     MediaSource::ReadOptions options;
     if (mSeeking) {
         options.setSeekTo(mSeekTimeUs);
-        mSeeking = false;
     }
 
     do {
@@ -126,8 +125,25 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
         CHECK(mFirstBuffer == NULL);
         mFirstBufferResult = OK;
         mIsFirstBuffer = false;
+
+        if (mSeeking) {
+            mPositionTimeRealUs = 0;
+            mPositionTimeMediaUs = mSeekTimeUs;
+            mSeeking = false;
+        }
+
     } else {
         mIsFirstBuffer = true;
+
+        if (mSeeking) {
+            mPositionTimeRealUs = 0;
+            if (mFirstBuffer == NULL || !mFirstBuffer->meta_data()->findInt64(
+                    kKeyTime, &mPositionTimeMediaUs)) {
+                return UNKNOWN_ERROR;
+            }
+            mSeeking = false;
+        }
+
     }
 
     sp<MetaData> format = mSource->getFormat();
@@ -168,14 +184,12 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
             ALOGE("%s Couldn't map mime type \"%s\" to a valid AudioSystem::audio_format",
                   __func__, mime);
             audioFormat = AUDIO_FORMAT_INVALID;
-        } else {
+        } else if (audio_is_linear_pcm(audioFormat) || audio_is_offload_pcm(audioFormat)) {
             // Override audio format for PCM offload
-            if (audioFormat == AUDIO_FORMAT_PCM_16_BIT) {
-                if (16 == bitWidth)
-                    audioFormat = AUDIO_FORMAT_PCM_16_BIT_OFFLOAD;
-                else if (24 == bitWidth)
-                    audioFormat = AUDIO_FORMAT_PCM_24_BIT_OFFLOAD;
-            }
+            if (bitWidth >= 24)
+                audioFormat = AUDIO_FORMAT_PCM_24_BIT_OFFLOAD;
+            else
+                audioFormat = AUDIO_FORMAT_PCM_24_BIT_OFFLOAD;
 
             ALOGV("%s Mime type \"%s\" mapped to audio_format 0x%x",
                   __func__, mime, audioFormat);
@@ -885,8 +899,8 @@ int64_t AudioPlayer::getMediaTimeUs() {
     }
 
     int64_t realTimeOffset = getRealTimeUsLocked() - mPositionTimeRealUs;
-    if (realTimeOffset < 0) {
-        realTimeOffset = 0;
+    if (mPositionTimeMediaUs + realTimeOffset < 0) {
+        return 0;
     }
 
     return mPositionTimeMediaUs + realTimeOffset;

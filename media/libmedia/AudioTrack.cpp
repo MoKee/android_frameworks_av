@@ -1965,16 +1965,6 @@ nsecs_t AudioTrack::processAudioBuffer()
             return NS_NEVER;
         }
 
-        if (mRetryOnPartialBuffer && !isOffloaded()) {
-            mRetryOnPartialBuffer = false;
-            if (avail < mRemainingFrames) {
-                int64_t myns = ((mRemainingFrames - avail) * 1100000000LL) / sampleRate;
-                if (ns < 0 || myns < ns) {
-                    ns = myns;
-                }
-                return ns;
-            }
-        }
 
         // Divide buffer size by 2 to take into account the expansion
         // due to 8 to 16 bit conversion: the callback must fill only half
@@ -2098,6 +2088,13 @@ status_t AudioTrack::restoreTrack_l(const char *from)
 #endif
         if (mState == STATE_ACTIVE) {
             result = mAudioTrack->start();
+        }
+
+        if (mVolume[AUDIO_INTERLEAVE_LEFT] != 1.0 || mVolume[AUDIO_INTERLEAVE_RIGHT] != 1.0) {
+            ALOGV("restore setVolume proxy left:%f right:%f",mVolume[AUDIO_INTERLEAVE_LEFT]
+                , mVolume[AUDIO_INTERLEAVE_RIGHT]);
+            mProxy->setVolumeLR(gain_minifloat_pack(gain_from_float(mVolume[AUDIO_INTERLEAVE_LEFT])
+                , gain_from_float(mVolume[AUDIO_INTERLEAVE_RIGHT])));
         }
     }
     if (result != NO_ERROR) {
