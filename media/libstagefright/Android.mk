@@ -125,7 +125,7 @@ endif
 
 LOCAL_C_INCLUDES += \
     $(call project-path-for,qcom-media)/mm-core/inc
-ifneq ($(filter caf-new caf-old,$(TARGET_QCOM_MEDIA_VARIANT)),)
+ifeq ($(filter caf-new caf-old,$(TARGET_QCOM_MEDIA_VARIANT)),)
     LOCAL_CFLAGS += -DLEGACY_MEDIA
 endif
 
