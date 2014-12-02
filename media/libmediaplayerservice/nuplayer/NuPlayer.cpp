@@ -174,7 +174,8 @@ NuPlayer::NuPlayer()
       mStarted(false) {
 
     clearFlushComplete();
-    mPlayerExtendedStats = new PlayerExtendedStats("NuPlayer", gettid());
+    mPlayerExtendedStats = (PlayerExtendedStats *)ExtendedStats::Create(
+            ExtendedStats::PLAYER, "NuPlayer", gettid());
 }
 
 NuPlayer::~NuPlayer() {
@@ -644,7 +645,9 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
             sp<AMessage> notify = new AMessage(kWhatRendererNotify, id());
             ++mRendererGeneration;
             notify->setInt32("generation", mRendererGeneration);
-            notify->setObject(MEDIA_EXTENDED_STATS, mPlayerExtendedStats);
+            if (mPlayerExtendedStats != NULL) {
+                notify->setObject(MEDIA_EXTENDED_STATS, mPlayerExtendedStats);
+            }
             mRenderer = new Renderer(mAudioSink, notify, flags);
 
             mRendererLooper = new ALooper;
@@ -657,6 +660,7 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
             if (meta != NULL
                     && meta->findInt32(kKeyFrameRate, &rate) && rate > 0) {
                 mRenderer->setVideoFrameRate(rate);
+                PLAYER_STATS(setFrameRate, rate);
             }
 
             postScanSources();
@@ -1215,7 +1219,9 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
         *decoder = new Decoder(notify, mNativeWindow);
     }
 
-    format->setObject(MEDIA_EXTENDED_STATS, mPlayerExtendedStats);
+    if (mPlayerExtendedStats != NULL) {
+        format->setObject(MEDIA_EXTENDED_STATS, mPlayerExtendedStats);
+    }
 
     (*decoder)->init();
     (*decoder)->configure(format);

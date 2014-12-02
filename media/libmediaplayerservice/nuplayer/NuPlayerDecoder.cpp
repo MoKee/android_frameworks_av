@@ -116,8 +116,8 @@ void NuPlayer::Decoder::onConfigure(const sp<AMessage> &format) {
             format->findObject(MEDIA_EXTENDED_STATS, (sp<RefBase>*)&mPlayerExtendedStats);
         }
         int32_t isVideo = !strncasecmp(mime.c_str(), "video/", 6);
-        ExtendedStats::AutoProfile autoProfile(STATS_PROFILE_ALLOCATE_NODE(isVideo),
-                mPlayerExtendedStats == NULL ? NULL : mPlayerExtendedStats->getProfileTimes());
+        ExtendedStats::AutoProfile autoProfile(
+                STATS_PROFILE_ALLOCATE_NODE(isVideo), mPlayerExtendedStats);
 
         if (!mComponentName.startsWith(mime.c_str())) {
             mCodec = MediaCodec::CreateByComponentName(mCodecLooper, mComponentName.c_str());
@@ -156,7 +156,9 @@ void NuPlayer::Decoder::onConfigure(const sp<AMessage> &format) {
         // any error signaling will occur.
         ALOGW_IF(err != OK, "failed to disconnect from surface: %d", err);
     }
-    format->setObject(MEDIA_EXTENDED_STATS, mPlayerExtendedStats);
+    if (mPlayerExtendedStats != NULL) {
+        format->setObject(MEDIA_EXTENDED_STATS, mPlayerExtendedStats);
+    }
     err = mCodec->configure(
             format, surface, NULL /* crypto */, 0 /* flags */);
     if (err != OK) {

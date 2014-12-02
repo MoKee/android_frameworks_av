@@ -1391,6 +1391,18 @@ audio_io_handle_t AudioPolicyManager::getOutputForDevice(
     if (profile != 0) {
         sp<AudioOutputDescriptor> outputDesc = NULL;
 
+#ifdef MULTIPLE_OFFLOAD_ENABLED
+        bool multiOffloadEnabled = false;
+        char value[PROPERTY_VALUE_MAX] = {0};
+        property_get("audio.offload.multiple.enabled", value, NULL);
+        if (atoi(value) || !strncmp("true", value, 4))
+            multiOffloadEnabled = true;
+        // if multiple concurrent offload decode is supported
+        // do no check for reuse and also don't close previous output if its offload
+        // previous output will be closed during track destruction
+        if (multiOffloadEnabled && ((flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) != 0))
+            goto get_output__new_output_desc;
+#endif
         for (size_t i = 0; i < mOutputs.size(); i++) {
             sp<AudioOutputDescriptor> desc = mOutputs.valueAt(i);
             if (!desc->isDuplicated() && (profile == desc->mProfile)) {
@@ -1409,6 +1421,7 @@ audio_io_handle_t AudioPolicyManager::getOutputForDevice(
         if (outputDesc != NULL) {
             closeOutput(outputDesc->mIoHandle);
         }
+get_output__new_output_desc:
         outputDesc = new AudioOutputDescriptor(profile);
         outputDesc->mDevice = device;
         outputDesc->mLatency = 0;
@@ -4222,7 +4235,7 @@ status_t AudioPolicyManager::checkInputsForDevice(audio_devices_t device,
         // check if one opened input is not needed any more after disconnecting one device
         for (size_t input_index = 0; input_index < mInputs.size(); input_index++) {
             desc = mInputs.valueAt(input_index);
-            if (!(desc->mProfile->mSupportedDevices.types() & mAvailableInputDevices.types())) {
+            if (!(desc->mProfile->mSupportedDevices.types() & (mAvailableInputDevices.types() & ~AUDIO_DEVICE_BIT_IN))) {
                 ALOGV("checkInputsForDevice(): disconnecting adding input %d",
                       mInputs.keyAt(input_index));
                 inputs.add(mInputs.keyAt(input_index));
@@ -4237,7 +4250,7 @@ status_t AudioPolicyManager::checkInputsForDevice(audio_devices_t device,
                  profile_index < mHwModules[module_index]->mInputProfiles.size();
                  profile_index++) {
                 sp<IOProfile> profile = mHwModules[module_index]->mInputProfiles[profile_index];
-                if (profile->mSupportedDevices.types() & device) {
+                if (profile->mSupportedDevices.types() & (device & ~AUDIO_DEVICE_BIT_IN)) {
                     ALOGV("checkInputsForDevice(): clearing direct input profile %zu on module %zu",
                           profile_index, module_index);
                     if (profile->mSamplingRates[0] == 0) {
@@ -4473,7 +4486,7 @@ void AudioPolicyManager::checkA2dpSuspend()
     if (mA2dpSuspended) {
         if ((!isScoConnected ||
              ((mForceUse[AUDIO_POLICY_FORCE_FOR_COMMUNICATION] != AUDIO_POLICY_FORCE_BT_SCO) &&
-              (mForceUse[AUDIO_POLICY_FORCE_FOR_RECORD] != AUDIO_POLICY_FORCE_BT_SCO))) &&
+              (mForceUse[AUDIO_POLICY_FORCE_FOR_RECORD] != AUDIO_POLICY_FORCE_BT_SCO))) ||
              ((mPhoneState != AUDIO_MODE_IN_CALL) &&
               (mPhoneState != AUDIO_MODE_RINGTONE))) {
 
@@ -4483,7 +4496,7 @@ void AudioPolicyManager::checkA2dpSuspend()
     } else {
         if ((isScoConnected &&
              ((mForceUse[AUDIO_POLICY_FORCE_FOR_COMMUNICATION] == AUDIO_POLICY_FORCE_BT_SCO) ||
-              (mForceUse[AUDIO_POLICY_FORCE_FOR_RECORD] == AUDIO_POLICY_FORCE_BT_SCO))) ||
+              (mForceUse[AUDIO_POLICY_FORCE_FOR_RECORD] == AUDIO_POLICY_FORCE_BT_SCO))) &&
              ((mPhoneState == AUDIO_MODE_IN_CALL) ||
               (mPhoneState == AUDIO_MODE_RINGTONE))) {
 
