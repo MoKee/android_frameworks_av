@@ -158,7 +158,9 @@ private:
         AC3,
         EAC3,
         DTS,
+        FLAC,
         MPEG4,
+        HEVC,
         OTHER
     };
 
@@ -257,6 +259,18 @@ MatroskaSource::MatroskaSource(
 
         mNALSizeLen = 1 + (avcc[4] & 3);
         ALOGV("mNALSizeLen = %zu", mNALSizeLen);
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_VIDEO_HEVC)) {
+        mType = HEVC;
+
+        uint32_t type;
+        const void *data;
+        size_t size;
+        CHECK(meta->findData(kKeyHVCC, &type, &data, &size));
+
+        const uint8_t *ptr = (const uint8_t *)data;
+        CHECK(size >= 7);
+        mNALSizeLen = 1 + (ptr[14 + 7] & 3);
+        ALOGV("mNALSizeLen = %zu", mNALSizeLen);
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AAC)) {
         mType = AAC;
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AC3)) {
@@ -265,10 +279,12 @@ MatroskaSource::MatroskaSource(
         mType = EAC3;
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_MPEG)) {
         mType = MP3;
-    } else if (!strcasecmp (mime, MEDIA_MIMETYPE_VIDEO_MPEG4)) {
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_VIDEO_MPEG4)) {
         mType = MPEG4;
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_DTS)) {
         mType = DTS;
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_FLAC)) {
+        mType = FLAC;
     }
 }
 
@@ -646,7 +662,7 @@ status_t MatroskaSource::read(
     MediaBuffer *frame = *mPendingFrames.begin();
     mPendingFrames.erase(mPendingFrames.begin());
 
-    if (mType != AVC) {
+    if (mType != AVC && mType != HEVC) {
         if (targetSampleTimeUs >= 0ll) {
             frame->meta_data()->setInt64(
                     kKeyTargetTime, targetSampleTimeUs);
@@ -1037,6 +1053,10 @@ void MatroskaExtractor::addTracks() {
                         ALOGW("%s is detected, but does not have configuration.",
                                 codecID);
                     }
+                } else if (!strcmp("V_MPEGH/ISO/HEVC", codecID)) {
+                    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_HEVC);
+                    meta->setData(kKeyHVCC, 0, codecPrivate, codecPrivateSize);
+
                 } else if (!strcmp("V_VP8", codecID)) {
                     meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_VP8);
                 } else if (!strcmp("V_VP9", codecID)) {
@@ -1124,6 +1144,8 @@ void MatroskaExtractor::addTracks() {
                     meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_EAC3);
                 } else if (!strcmp("A_DTS", codecID)) {
                     meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_DTS);
+                } else if (!strcmp("A_FLAC", codecID)) {
+                    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_FLAC);
                 } else {
                     ALOGW("%s is not supported.", codecID);
                     continue;
@@ -1131,6 +1153,9 @@ void MatroskaExtractor::addTracks() {
 
                 meta->setInt32(kKeySampleRate, atrack->GetSamplingRate());
                 meta->setInt32(kKeyChannelCount, atrack->GetChannels());
+
+                long long bits = atrack->GetBitDepth();
+                meta->setInt32(kKeyBitsPerSample, bits > 16 ? 24 : bits);
                 break;
             }
 
