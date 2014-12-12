@@ -379,6 +379,10 @@ status_t AudioTrack::set(
     // only allow deep buffering for music stream type
     if (mStreamType != AUDIO_STREAM_MUSIC) {
         flags = (audio_output_flags_t)(flags &~AUDIO_OUTPUT_FLAG_DEEP_BUFFER);
+        if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+            ALOGE("Offloading only allowed with music stream");
+            return BAD_VALUE; // To trigger fallback or let the client handle
+        }
     }
 
 #ifdef QCOM_HARDWARE
@@ -1939,6 +1943,16 @@ nsecs_t AudioTrack::processAudioBuffer()
             return NS_NEVER;
         }
 
+        if (mRetryOnPartialBuffer && !isOffloaded()) {
+            mRetryOnPartialBuffer = false;
+            if (avail < mRemainingFrames) {
+                int64_t myns = ((mRemainingFrames - avail) * 1100000000LL) / sampleRate;
+                if (ns < 0 || myns < ns) {
+                    ns = myns;
+                }
+                return ns;
+            }
+        }
 
         // Divide buffer size by 2 to take into account the expansion
         // due to 8 to 16 bit conversion: the callback must fill only half
