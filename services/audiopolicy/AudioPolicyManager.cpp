@@ -2592,13 +2592,24 @@ return false;
 
 #ifdef ENABLE_AV_ENHANCEMENTS
     if (audio_is_offload_pcm(offloadInfo.format)) {
-        if(property_get("audio.offload.pcm.16bit.enable", propValue, NULL))
-            pcmOffload = atoi(propValue) || !strncmp("true", propValue, 4);
-        if(property_get("audio.offload.pcm.24bit.enable", propValue, NULL))
-            pcmOffload = pcmOffload || atoi(propValue) || !strncmp("true", propValue, 4);
-        if (pcmOffload) {
+        bool prop_enabled = false;
+        if ((AUDIO_FORMAT_PCM_16_BIT_OFFLOAD == offloadInfo.format) &&
+               property_get("audio.offload.pcm.16bit.enable", propValue, NULL)) {
+            prop_enabled = atoi(propValue) || !strncmp("true", propValue, 4);
+        }
+
+        if ((AUDIO_FORMAT_PCM_24_BIT_OFFLOAD == offloadInfo.format) &&
+               property_get("audio.offload.pcm.24bit.enable", propValue, NULL)) {
+            prop_enabled = atoi(propValue) || !strncmp("true", propValue, 4);
+        }
+
+        if (prop_enabled) {
             ALOGI("PCM offload property is enabled");
-        } else {
+            pcmOffload = true;
+        }
+
+        if (!pcmOffload) {
+            ALOGV("system property not enabled for PCM offload format[%x]",offloadInfo.format);
             return false;
         }
     }
@@ -3262,13 +3273,10 @@ status_t AudioPolicyManager::setAudioPortConfig(const struct audio_port_config *
 
 void AudioPolicyManager::clearAudioPatches(uid_t uid)
 {
-    for (ssize_t i = 0; i < (ssize_t)mAudioPatches.size(); i++)  {
+    for (ssize_t i = (ssize_t)mAudioPatches.size() - 1; i >= 0; i--)  {
         sp<AudioPatch> patchDesc = mAudioPatches.valueAt(i);
         if (patchDesc->mUid == uid) {
-            // releaseAudioPatch() removes the patch from mAudioPatches
-            if (releaseAudioPatch(mAudioPatches.keyAt(i), uid) == NO_ERROR) {
-                i--;
-            }
+            releaseAudioPatch(mAudioPatches.keyAt(i), uid);
         }
     }
 }
@@ -7466,6 +7474,7 @@ bool AudioPolicyManager::IOProfile::isCompatibleProfile(audio_devices_t device,
 {
     const bool isPlaybackThread = mType == AUDIO_PORT_TYPE_MIX && mRole == AUDIO_PORT_ROLE_SOURCE;
     const bool isRecordThread = mType == AUDIO_PORT_TYPE_MIX && mRole == AUDIO_PORT_ROLE_SINK;
+    ALOGV("isPlaybackThread %d,isRecordThread %d", isPlaybackThread, isRecordThread);
     ALOG_ASSERT(isPlaybackThread != isRecordThread);
     if ((mSupportedDevices.types() & device) != device) {
         return false;
