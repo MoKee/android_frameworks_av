@@ -164,6 +164,10 @@ void NuPlayer::Renderer::signalDisableOffloadAudio() {
     (new AMessage(kWhatDisableOffloadAudio, id()))->post();
 }
 
+void NuPlayer::Renderer::signalEnableOffloadAudio() {
+    (new AMessage(kWhatEnableOffloadAudio, id()))->post();
+}
+
 void NuPlayer::Renderer::pause() {
     (new AMessage(kWhatPause, id()))->post();
 }
@@ -424,6 +428,12 @@ void NuPlayer::Renderer::onMessageReceived(const sp<AMessage> &msg) {
         case kWhatDisableOffloadAudio:
         {
             onDisableOffloadAudio();
+            break;
+        }
+
+        case kWhatEnableOffloadAudio:
+        {
+            onEnableOffloadAudio();
             break;
         }
 
@@ -1073,6 +1083,7 @@ void NuPlayer::Renderer::onFlush(const sp<AMessage> &msg) {
          if (!(offloadingAudio()) && !(mPaused)) {
              setPauseStartedTimeRealUs(-1);
          }
+         setAnchorTime(-1, -1);
     }
 
     ALOGV("flushing %s", audio ? "audio" : "video");
@@ -1174,6 +1185,12 @@ void NuPlayer::Renderer::onAudioSinkChanged() {
 void NuPlayer::Renderer::onDisableOffloadAudio() {
     Mutex::Autolock autoLock(mLock);
     mFlags &= ~FLAG_OFFLOAD_AUDIO;
+    ++mAudioQueueGeneration;
+}
+
+void NuPlayer::Renderer::onEnableOffloadAudio() {
+    Mutex::Autolock autoLock(mLock);
+    mFlags |= FLAG_OFFLOAD_AUDIO;
     ++mAudioQueueGeneration;
 }
 
@@ -1496,6 +1513,9 @@ bool NuPlayer::Renderer::onOpenAudioSink(
     }
     if (audioSinkChanged) {
         onAudioSinkChanged();
+    }
+    if (offloadingAudio()) {
+        mAudioOffloadTornDown = false;
     }
 
     return offloadingAudio();
