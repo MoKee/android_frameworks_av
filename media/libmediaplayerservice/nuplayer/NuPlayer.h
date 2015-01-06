@@ -99,6 +99,7 @@ private:
     struct CCDecoder;
     struct GenericSource;
     struct HTTPLiveSource;
+    struct HTTPLiveSourceCustom;
     struct Renderer;
     struct RTSPSource;
     struct StreamingSource;
@@ -198,6 +199,8 @@ private:
     bool mStarted;
     bool mBuffering;
     bool mPlaying;
+
+    bool mImageShowed;
 
     inline const sp<Decoder> &getDecoder(bool audio) {
         return audio ? mAudioDecoder : mVideoDecoder;
