@@ -329,6 +329,14 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
                mpClientInterface->setParameters(0, param.toString());
             }
 
+#ifdef QCOM_DIRECTTRACK
+            if (audio_is_usb_device(device)) {
+               AudioParameter param;
+               param.add(String8("usb_connected"), String8("true"));
+               mpClientInterface->setParameters(0, param.toString());
+            }
+#endif
+
             if (index >= 0) {
                 sp<HwModule> module = getModuleForDevice(device);
                 if (module == 0) {
@@ -400,6 +408,15 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
                param.add(String8("a2dp_connected"), String8("false"));
                mpClientInterface->setParameters(0, param.toString());
             }
+
+#ifdef QCOM_DIRECTTRACK
+            if (audio_is_usb_device(device)) {
+                // handle USB device disconnection
+                AudioParameter param;
+                param.add(String8("usb_connected"), String8("false"));
+                mpClientInterface->setParameters(0, param.toString());
+            }
+#endif
 
             checkOutputsForDevice(devDesc, state, outputs, address);
             } break;
@@ -585,7 +602,11 @@ void AudioPolicyManager::updateCallRouting(audio_devices_t rxDevice, int delayMs
     audio_patch_handle_t afPatchHandle;
     DeviceVector deviceList;
 
+#ifndef QCOM_DIRECTTRACK
     audio_devices_t txDevice = getDeviceForInputSource(AUDIO_SOURCE_VOICE_COMMUNICATION);
+#else
+    audio_devices_t txDevice = getDeviceForInputSource(AUDIO_SOURCE_VOICE_CALL);
+#endif
     ALOGV("updateCallRouting device rxDevice %08x txDevice %08x", rxDevice, txDevice);
 
     // release existing RX patch if any
@@ -5419,6 +5440,7 @@ audio_devices_t AudioPolicyManager::getDeviceForInputSource(audio_source_t input
     break;
 
     case AUDIO_SOURCE_VOICE_COMMUNICATION:
+#ifndef QCOM_DIRECTTRACK
         // Allow only use of devices on primary input if in call and HAL does not support routing
         // to voice call path.
         if ((mPhoneState == AUDIO_MODE_IN_CALL) &&
@@ -5453,6 +5475,9 @@ audio_devices_t AudioPolicyManager::getDeviceForInputSource(audio_source_t input
             }
             break;
         }
+#else
+        device = AUDIO_DEVICE_IN_COMMUNICATION;
+#endif
         break;
 
     case AUDIO_SOURCE_VOICE_RECOGNITION:
