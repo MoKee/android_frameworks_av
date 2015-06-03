@@ -1113,7 +1113,7 @@ status_t AudioTrack::getPosition(uint32_t *position)
     }
 
     AutoMutex lock(mLock);
-    if (isOffloadedOrDirect_l()) {
+    if (isOffloadedOrDirect_l() && ((mFlags & AUDIO_OUTPUT_FLAG_VOIP_RX) == 0)) {
         uint32_t dspFrames = 0;
         status_t status;
 
