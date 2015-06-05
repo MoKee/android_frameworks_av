@@ -1113,7 +1113,11 @@ status_t AudioTrack::getPosition(uint32_t *position)
     }
 
     AutoMutex lock(mLock);
+#ifdef QCOM_HARDWARE
     if (isOffloadedOrDirect_l() && ((mFlags & AUDIO_OUTPUT_FLAG_VOIP_RX) == 0)) {
+#else
+    if (isOffloadedOrDirect_l()) {
+#endif
         uint32_t dspFrames = 0;
         status_t status;
 
