@@ -56,12 +56,14 @@ namespace android {
 static void *loadExtractorPlugin() {
     void *ret = NULL;
     char lib[PROPERTY_VALUE_MAX];
-    if (property_get("media.stagefright.extractor-plugin", lib, "libFFmpegExtractor.so")) {
-        if (void *extractorLib = ::dlopen(lib, RTLD_LAZY)) {
-            ret = ::dlsym(extractorLib, "getExtractorPlugin");
-            ALOGW_IF(!ret, "Failed to find symbol, dlerror: %s", ::dlerror());
-        } else {
-            ALOGV("Failed to load %s, dlerror: %s", lib, ::dlerror());
+    if (property_get("media.sf.extractor-plugin", lib, NULL)) {
+        if (lib != NULL) {
+            if (void *extractorLib = ::dlopen(lib, RTLD_LAZY)) {
+                ret = ::dlsym(extractorLib, "getExtractorPlugin");
+                ALOGW_IF(!ret, "Failed to find symbol, dlerror: %s", ::dlerror());
+            } else {
+                ALOGV("Failed to load %s, dlerror: %s", lib, ::dlerror());
+            }
         }
     }
     return ret;
@@ -179,7 +181,7 @@ bool Sniffer::sniff(
     }
 
     /* Only do the deeper sniffers if the results are null or in doubt */
-    if (mimeType->length() == 0 || *confidence <= 0.2f || forceExtraSniffers) {
+    if (mimeType->length() == 0 || *confidence < 0.21f || forceExtraSniffers) {
         for (List<SnifferFunc>::iterator it = mExtraSniffers.begin();
                 it != mExtraSniffers.end(); ++it) {
             String8 newMimeType;

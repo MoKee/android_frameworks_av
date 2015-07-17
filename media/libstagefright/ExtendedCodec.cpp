@@ -105,7 +105,7 @@ static const MetaKeyEntry MetaKeyTable[] {
    {kKeyCodecId              , "codec-id"               , INT32},
    {kKeySampleFormat         , "sample-format"          , INT32},
    {kKeyBlockAlign           , "block-align"            , INT32},
-
+   {kKeyCodedSampleBits      , "coded-sample-bits"      , INT32},
    {kKeyAACAOT               , "aac-profile"            , INT32},
    {kKeyRVVersion            , "rv-version"             , INT32},
    {kKeyWMAVersion           , "wma-version"            , INT32},  // int32_t
@@ -488,10 +488,8 @@ status_t ExtendedCodec::setSupportedRole(
         OMX_PARAM_COMPONENTROLETYPE roleParams;
         InitOMXParams(&roleParams);
 
-        strncpy((char *)roleParams.cRole,
-                role, OMX_MAX_STRINGNAME_SIZE - 1);
-
-        roleParams.cRole[OMX_MAX_STRINGNAME_SIZE - 1] = '\0';
+        strlcpy((char *)roleParams.cRole,
+                role, OMX_MAX_STRINGNAME_SIZE);
 
         status_t err = omx->setParameter(
                 node, OMX_IndexParamStandardComponentRole,

@@ -607,7 +607,7 @@ status_t OMXCodec::parseHEVCCodecSpecificData(
     const uint8_t *ptr = (const uint8_t *)data;
 
     // verify minimum size and configurationVersion == 1.
-    if (size < 7 || ptr[0] != 1) {
+    if (size < 7) {
         return ERROR_MALFORMED;
     }
 
@@ -2337,7 +2337,7 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
 #ifdef EXYNOS4_ENHANCEMENTS
     err = native_window_set_usage(
             mNativeWindow.get(), usage | GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_EXTERNAL_DISP
-            | GRALLOC_USAGE_HW_FIMC1 | GRALLOC_USAGE_HWC_HWOVERLAY);
+            | GRALLOC_USAGE_HW_FIMC1);
 #else
     err = native_window_set_usage(
             mNativeWindow.get(), usage | GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_EXTERNAL_DISP);

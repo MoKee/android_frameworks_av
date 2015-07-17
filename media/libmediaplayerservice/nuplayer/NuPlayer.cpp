@@ -128,6 +128,23 @@ private:
     DISALLOW_EVIL_CONSTRUCTORS(FlushDecoderAction);
 };
 
+struct NuPlayer::InstantiateDecoderAction : public Action {
+    InstantiateDecoderAction(bool audio, sp<DecoderBase> *decoder)
+        : mAudio(audio),
+          mdecoder(decoder) {
+    }
+
+    virtual void execute(NuPlayer *player) {
+        player->instantiateDecoder(mAudio, mdecoder);
+    }
+
+private:
+    bool mAudio;
+    sp<DecoderBase> *mdecoder;
+
+    DISALLOW_EVIL_CONSTRUCTORS(InstantiateDecoderAction);
+};
+
 struct NuPlayer::PostMessageAction : public Action {
     PostMessageAction(const sp<AMessage> &msg)
         : mMessage(msg) {
@@ -923,7 +940,9 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                 } else {
                     ALOGV("Decoded PCM offload flushing mFLushingAudio %d", mFlushingAudio);
                     if (mAudioDecoder != NULL && mFlushingAudio == NONE) {
-                        flushDecoder(true /* audio */, true/* needShutdown */);
+                        mDeferredActions.push_back(
+                                new FlushDecoderAction(FLUSH_CMD_SHUTDOWN /* audio */,
+                                                       FLUSH_CMD_NONE /* video */));
                     }
                 }
                 mRenderer->flush(
@@ -945,10 +964,12 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     mRenderer->signalDisableOffloadAudio();
                     mOffloadAudio = false;
                     mOffloadDecodedPCM = false;
-                    instantiateDecoder(true /* audio */, &mAudioDecoder);
+                    mDeferredActions.push_back(
+                            new InstantiateDecoderAction(true /* audio */, &mAudioDecoder));
                 } else {
                     mOffloadAudioTornDown = true;
                 }
+                processDeferredActions();
             }
             break;
         }
@@ -1038,7 +1059,7 @@ void NuPlayer::onResume() {
     } else {
         ALOGW("resume called when source is gone or not set");
     }
-    if (mOffloadAudioTornDown && mOffloadAudio) {
+    if (mOffloadAudioTornDown && mOffloadAudio && !mOffloadDecodedPCM) {
           // Resuming after a pause timed out event, check if can continue with offload
           sp<AMessage> videoFormat = mSource->getFormat(false /* audio */);
           sp<AMessage> format = mSource->getFormat(true /*audio*/);
@@ -1287,12 +1308,20 @@ void NuPlayer::tryOpenAudioSinkForOffload(const sp<AMessage> &format, bool hasVi
     }
 }
 
+void NuPlayer::startAudioSink() {
+    mRenderer->startAudioSink();
+}
+
 void NuPlayer::closeAudioSink() {
     mRenderer->closeAudioSink();
 }
 
 int64_t NuPlayer::getServerTimeoutUs() {
-    return mSource->getServerTimeoutUs();
+    int64_t ret = 0;
+    if (mSource != NULL) {
+        ret = mSource->getServerTimeoutUs();
+    }
+    return ret;
 }
 
 status_t NuPlayer::instantiateDecoder(bool audio, sp<DecoderBase> *decoder) {
