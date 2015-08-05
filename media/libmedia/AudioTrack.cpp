@@ -128,6 +128,7 @@ AudioTrack::AudioTrack()
     mAttributes.content_type = AUDIO_CONTENT_TYPE_UNKNOWN;
     mAttributes.usage = AUDIO_USAGE_UNKNOWN;
     mAttributes.flags = 0x0;
+    initializeTrackOffloadParams();
     strcpy(mAttributes.tags, "");
 }
 
@@ -151,7 +152,6 @@ AudioTrack::AudioTrack(
       mIsTimed(false),
       mPreviousPriority(ANDROID_PRIORITY_NORMAL),
       mPreviousSchedulingGroup(SP_DEFAULT),
-      mUseSmallBuf(false),
 #ifdef QCOM_DIRECTTRACK
       mPausedPosition(0),
       mAudioFlinger(NULL),
@@ -167,6 +167,7 @@ AudioTrack::AudioTrack(
     mAttributes.flags = 0x0;
     strcpy(mAttributes.tags, "");
 #endif
+    initializeTrackOffloadParams();
     mStatus = set(streamType, sampleRate, format, channelMask,
             frameCount, flags, cbf, user, notificationFrames,
             0 /*sharedBuffer*/, false /*threadCanCallJava*/, sessionId, transferType,
@@ -193,7 +194,6 @@ AudioTrack::AudioTrack(
       mIsTimed(false),
       mPreviousPriority(ANDROID_PRIORITY_NORMAL),
       mPreviousSchedulingGroup(SP_DEFAULT),
-      mUseSmallBuf(false),
 #ifdef QCOM_DIRECTTRACK
       mPausedPosition(0),
       mAudioFlinger(NULL),
@@ -208,6 +208,7 @@ AudioTrack::AudioTrack(
     mAttributes.flags = 0x0;
     strcpy(mAttributes.tags, "");
 #endif
+    initializeTrackOffloadParams();
     mStatus = set(streamType, sampleRate, format, channelMask,
             0 /*frameCount*/, flags, cbf, user, notificationFrames,
             sharedBuffer, false /*threadCanCallJava*/, sessionId, transferType, offloadInfo,
@@ -265,7 +266,6 @@ bool AudioTrack::canOffloadTrack(
              return false;
         }
 
-
        // Track offload only if the following criterion
        // 1. Track offload info structure should NOT have been provided
        // 2. Format is 16 bit
@@ -273,11 +273,13 @@ bool AudioTrack::canOffloadTrack(
        // 4. Client uses write interface to provide data
 
 
-       // Track offload does not base any decision on mAttributes, or channelMask for now
+       // Track offload does not base any decision channelMask for now
+       // The value in attributes gets preference over stream type
 
         if (!offloadInfo &&
              (format == AUDIO_FORMAT_PCM_16_BIT) &&
-             (streamType == AUDIO_STREAM_MUSIC) &&
+             ((streamType == AUDIO_STREAM_MUSIC) ||
+             decideTrackOffloadfromAttributes(attributes)) &&
              (flags == AUDIO_OUTPUT_FLAG_NONE) &&
              (transferType != TRANSFER_CALLBACK))
         {
@@ -286,6 +288,10 @@ bool AudioTrack::canOffloadTrack(
             mPcmTrackOffloadInfo.format = AUDIO_FORMAT_PCM_16_BIT_OFFLOAD;
             mPcmTrackOffloadInfo.sample_rate  = mSampleRate;
             mPcmTrackOffloadInfo.channel_mask = channelMask;
+            if (mValidAttributes) {
+                ALOGV("Setting stream type from attributes");
+                streamType = audio_attributes_to_stream_type(attributes);
+            }
             mPcmTrackOffloadInfo.stream_type = streamType;
             mPcmTrackOffloadInfo.duration_us = 0xFFFFFFFF;
             //TODO: Use mAttributes and pass the value of content in this field
@@ -308,6 +314,14 @@ bool AudioTrack::canOffloadTrack(
               " channel mask %#x, flags %#x, transferType %d, offloadInfo %p",
               streamType, attributes->usage, mSampleRate, format, channelMask, flags,
               transferType, offloadInfo);
+        if (mSavedParams) {
+            mFlags = mOriginalFlags;
+            mFrameSize = mOriginalFrameSize;
+            mFrameSizeAF = mOriginalFrameSizeAF;
+            mFormat = mOriginalFormat;
+            mUseSmallBuf = false;
+            mIsPcmTrackOffloaded = false;
+        }
         return false;
 }
 status_t AudioTrack::set(
@@ -382,23 +396,27 @@ status_t AudioTrack::set(
         ALOGE("Track already in use");
         return INVALID_OPERATION;
     }
-
     // handle default values first.
     if (streamType == AUDIO_STREAM_DEFAULT) {
+        mValidStreamType = false;
         streamType = AUDIO_STREAM_MUSIC;
+    } else {
+        mValidStreamType = true;
     }
+
     if (pAttributes == NULL) {
         if (uint32_t(streamType) >= AUDIO_STREAM_PUBLIC_CNT) {
             ALOGE("Invalid stream type %d", streamType);
             return BAD_VALUE;
         }
         mStreamType = streamType;
-
+        mValidAttributes = false;
     } else {
         // stream type shouldn't be looked at, this track has audio attributes
         memcpy(&mAttributes, pAttributes, sizeof(audio_attributes_t));
         ALOGV("Building AudioTrack with attributes: usage=%d content=%d flags=0x%x tags=[%s]",
                 mAttributes.usage, mAttributes.content_type, mAttributes.flags, mAttributes.tags);
+        mValidAttributes = true;
         mStreamType = AUDIO_STREAM_DEFAULT;
     }
 
@@ -864,10 +882,17 @@ void AudioTrack::pause()
             // here can be slightly off.
 
             // TODO: check return code for getRenderPosition.
-
-            uint32_t halFrames;
-            AudioSystem::getRenderPosition(mOutput, &halFrames, &mPausedPosition);
-            ALOGV("AudioTrack::pause for offload, cache current position %u", mPausedPosition);
+            if (mIsPcmTrackOffloaded) {
+                uint32_t tempPos = 0;
+                tempPos = (mState == STATE_STOPPED || mState == STATE_FLUSHED) ?
+                    0 : updateAndGetPosition_l();
+                mPausedPosition = (tempPos / (mChannelCount * audio_bytes_per_sample(mFormat)));
+                ALOGV("TrackOffload::pause for offload, cache current position %u", mPausedPosition);
+            } else {
+                uint32_t halFrames;
+                AudioSystem::getRenderPosition(mOutput, &halFrames, &mPausedPosition);
+                ALOGV("AudioTrack::pause for offload, cache current position %u", mPausedPosition);
+            }
         }
     }
 }
@@ -1220,14 +1245,25 @@ status_t AudioTrack::createTrack_l()
     audio_io_handle_t output = AUDIO_IO_HANDLE_NONE;
     audio_stream_type_t streamType = mStreamType;
     audio_attributes_t *attr = (mStreamType == AUDIO_STREAM_DEFAULT) ? &mAttributes : NULL;
-    mCanOffloadPcmTrack = false;
     mIsPcmTrackOffloaded = false;
     mPcmTrackOffloadInfo = AUDIO_INFO_INITIALIZER;
+    if (mValidAttributes) {
+        mCanOffloadPcmTrack = decideTrackOffloadfromAttributes(&mAttributes);
+    } else if (mValidStreamType) {
+        mCanOffloadPcmTrack = decideTrackOffloadFromStreamType(mStreamType);
+    }
 
     // Check if the track can be offloaded. Store the decision in mCanOffloadPcmTrack
-    mCanOffloadPcmTrack = canOffloadTrack(mStreamType, mFormat, mChannelMask, mFlags,
-                              mTransfer, &mAttributes, mOffloadInfo);
-
+    // if stream type was not set, then do not try to offload track
+    if (mCanOffloadPcmTrack) {
+        if (mSavedParams) {
+            mCanOffloadPcmTrack = canOffloadTrack(mStreamType, mOriginalFormat, mChannelMask, mOriginalFlags,
+                                      mTransfer, &mAttributes, mOffloadInfo);
+        } else {
+            mCanOffloadPcmTrack = canOffloadTrack(mStreamType, mFormat, mChannelMask, mFlags,
+                                      mTransfer, &mAttributes, mOffloadInfo);
+        }
+    }
 
     if(mCanOffloadPcmTrack) {
         ALOGV("TrackOffload: Tying to create PCM Offload track");
@@ -1242,10 +1278,25 @@ status_t AudioTrack::createTrack_l()
             //got output
             ALOGV("TrackOffload: Going through PCM Offload Track");
             mIsPcmTrackOffloaded = true;
+            mSavedParams = true;
+            mOriginalFrameSize = mFrameSize;
+            mOriginalFrameSizeAF = mFrameSizeAF;
+            mOriginalFormat = mFormat;
+            mOriginalFlags = mFlags;
             mFlags = flags;
             mFrameSize = sizeof(uint8_t);
             mFrameSizeAF = sizeof(uint8_t);
             mUseSmallBuf = true;
+        } else {
+            ALOGV("getOutput failed in track offload, resetting params");
+            if (mSavedParams) {
+                mFlags = mOriginalFlags;
+                mFrameSize = mOriginalFrameSize;
+                mFrameSizeAF = mOriginalFrameSizeAF;
+                mFormat = mOriginalFormat;
+                mUseSmallBuf = false;
+                mIsPcmTrackOffloaded = false;
+             }
         }
     }
 
@@ -1255,7 +1306,7 @@ status_t AudioTrack::createTrack_l()
                                                         (audio_session_t)mSessionId, &streamType,
                                                         mSampleRate, mFormat, mChannelMask,
                                                         mFlags, mOffloadInfo);
-
+        ALOGV("retrieving regular output");
     }
 
     if (status != NO_ERROR || output == AUDIO_IO_HANDLE_NONE) {
@@ -2221,7 +2272,7 @@ status_t AudioTrack::restoreTrack_l(const char *from)
     // output parameters and new IAudioFlinger in createTrack_l()
     AudioSystem::clearAudioConfigCache();
 
-    if (isOffloadedOrDirect_l()) {
+    if (isOffloadedOrDirect_l() && !mIsPcmTrackOffloaded) {
         // FIXME re-creation of offloaded tracks is not yet implemented
         return DEAD_OBJECT;
     }
@@ -2604,4 +2655,47 @@ void AudioTrack::AudioTrackThread::pauseInternal(nsecs_t ns)
     mPausedNs = ns;
 }
 
+bool AudioTrack::decideTrackOffloadFromStreamType(const audio_stream_type_t sType)
+{
+
+   bool decision = false;
+   if(sType != AUDIO_STREAM_DEFAULT) {
+       decision = true;
+   }
+
+   return decision;
+}
+
+bool AudioTrack::decideTrackOffloadfromAttributes(const audio_attributes_t *pAttributes)
+{
+
+    bool decision = false;
+    if (pAttributes == NULL) {
+       return decision;
+    }
+
+    if ((pAttributes->usage == AUDIO_USAGE_MEDIA) ||
+        (pAttributes->usage == AUDIO_USAGE_GAME)) {
+        //the track can potentially be offloaded
+        decision = true;
+    } else {
+        ALOGV("TrackOffload: do not offload the track if attributes->usage is not media/game");
+    }
+
+    return decision;
+}
+
+void AudioTrack::initializeTrackOffloadParams()
+{
+    mUseSmallBuf  = false;
+    mSavedParams = false;
+    mValidAttributes = false;
+    mValidStreamType = false;
+    mOriginalFrameSize = 0;
+    mOriginalFrameSizeAF = 0;
+    mOriginalFormat = AUDIO_FORMAT_DEFAULT;
+    mOriginalFlags = AUDIO_OUTPUT_FLAG_NONE;
+    mIsPcmTrackOffloaded = false;
+    mCanOffloadPcmTrack = false;
+}
 }; // namespace android
