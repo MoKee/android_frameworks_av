@@ -138,6 +138,7 @@ cc_library_shared {
             uses_qti_camera2client: {
                 cppflags: ["-DUSE_QTI_CAMERA2CLIENT"],
                 srcs: [
+                    "api1/QTICamera2Client.cpp",
                     "api1/qticlient2/Parameters.cpp",
                     "api1/qticlient2/QTIParameters.cpp",
                     "api1/qticlient2/FrameProcessor.cpp",
