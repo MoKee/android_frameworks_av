@@ -1064,6 +1064,11 @@ status_t Camera2Client::startRecording() {
     if ( (res = checkPid(__FUNCTION__) ) != OK) return res;
     SharedParameters::Lock l(mParameters);
 
+#ifdef USE_QTI_CAMERA2CLIENT
+    if (l.mParameters.qtiParams->hfrMode) {
+        return mQTICamera2Client->startHFRRecording(l.mParameters);
+    }
+#endif
     return startRecordingL(l.mParameters, false);
 }
 
@@ -1250,6 +1255,12 @@ void Camera2Client::stopRecording() {
 
     status_t res;
     if ( (res = checkPid(__FUNCTION__) ) != OK) return;
+
+#ifdef USE_QTI_CAMERA2CLIENT
+    if (l.mParameters.qtiParams->hfrMode) {
+        return mQTICamera2Client->stopHFRRecording(l.mParameters);
+    }
+#endif
 
     switch (l.mParameters.state) {
         case Parameters::RECORD:
