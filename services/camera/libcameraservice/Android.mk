@@ -96,6 +96,10 @@ ifeq ($(BOARD_NEEDS_MEMORYHEAPION),true)
     LOCAL_CFLAGS += -DUSE_MEMORY_HEAP_ION
 endif
 
+ifeq ($(BOARD_FORCE_OPEN_TORCH),true)
+    LOCAL_CFLAGS += -DFORCE_OPEN_TORCH
+endif
+
 LOCAL_MODULE:= libcameraservice
 
 include $(BUILD_SHARED_LIBRARY)

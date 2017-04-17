@@ -257,8 +257,11 @@ void CameraService::onFirstRef()
             mCameraStates.emplace(cameraId, std::make_shared<CameraState>(cameraId, cost,
                     conflicting));
         }
-
+#ifdef FORCE_OPEN_TORCH
+        if (mFlashlight->hasFlashUnit(cameraId) || i==0) {
+#else
         if (mFlashlight->hasFlashUnit(cameraId)) {
+#endif
             mTorchStatusMap.add(cameraId,
                     ICameraServiceListener::TORCH_STATUS_AVAILABLE_OFF);
         }
