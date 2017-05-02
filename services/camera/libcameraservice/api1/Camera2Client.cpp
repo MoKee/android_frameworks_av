@@ -38,6 +38,7 @@
 #include "api1/QTICamera2Client.h"
 #include "api1/qticlient2/StreamingProcessor.h"
 #include "api1/qticlient2/JpegProcessor.h"
+#include "api1/qticlient2/RawProcessor.h"
 #include "api1/qticlient2/CaptureSequencer.h"
 #include "api1/qticlient2/CallbackProcessor.h"
 #include "api1/qticlient2/ZslProcessor.h"
@@ -147,6 +148,13 @@ status_t Camera2Client::initializeImpl(TProviderPtr providerPtr, const String8& 
     threadName = String8::format("C2-%d-JpegProc",
             mCameraId);
     mJpegProcessor->run(threadName.string());
+
+#ifdef USE_QTI_CAMERA2CLIENT
+    mRawProcessor = new RawProcessor(this, mCaptureSequencer);
+    threadName = String8::format("C2-%d-RawProc",
+            mCameraId);
+    mRawProcessor->run(threadName.string());
+#endif
 
     mZslProcessor = new ZslProcessor(this, mCaptureSequencer);
 
@@ -440,6 +448,9 @@ binder::Status Camera2Client::disconnect() {
     mFrameProcessor->requestExit();
     mCaptureSequencer->requestExit();
     mJpegProcessor->requestExit();
+#ifdef USE_QTI_CAMERA2CLIENT
+    mRawProcessor->requestExit();
+#endif
     mZslProcessor->requestExit();
     mCallbackProcessor->requestExit();
 
@@ -453,6 +464,9 @@ binder::Status Camera2Client::disconnect() {
         mFrameProcessor->join();
         mCaptureSequencer->join();
         mJpegProcessor->join();
+#ifdef USE_QTI_CAMERA2CLIENT
+        mRawProcessor->join();
+#endif
         mZslProcessor->join();
         mCallbackProcessor->join();
 
@@ -464,6 +478,9 @@ binder::Status Camera2Client::disconnect() {
     mStreamingProcessor->deletePreviewStream();
     mStreamingProcessor->deleteRecordingStream();
     mJpegProcessor->deleteStream();
+#ifdef USE_QTI_CAMERA2CLIENT
+    mRawProcessor->deleteStream();
+#endif
     mCallbackProcessor->deleteStream();
     mZslProcessor->deleteStream();
 
@@ -780,6 +797,13 @@ status_t Camera2Client::startPreviewL(Parameters &params, bool restart) {
     }
 
     bool previewStreamChanged = mStreamingProcessor->getPreviewStreamId() != lastPreviewStreamId;
+
+#ifdef USE_QTI_CAMERA2CLIENT
+    // deleting raw stream before starting preview
+    if(NO_STREAM != mRawProcessor->getStreamId()) {
+        mRawProcessor->deleteStream();
+    }
+#endif
 
     // We could wait to create the JPEG output stream until first actual use
     // (first takePicture call). However, this would substantially increase the
@@ -1477,6 +1501,9 @@ status_t Camera2Client::takePicture(int /*msgType*/) {
     bool shouldSyncWithDevice = true;
     {
         SharedParameters::Lock l(mParameters);
+#ifdef USE_QTI_CAMERA2CLIENT
+        res = mQTICamera2Client->configureRaw(l.mParameters);
+#endif
         switch (l.mParameters.state) {
             case Parameters::DISCONNECTED:
             case Parameters::STOPPED:
@@ -1533,6 +1560,12 @@ status_t Camera2Client::takePicture(int /*msgType*/) {
                 return INVALID_OPERATION;
         }
 
+#ifdef USE_QTI_CAMERA2CLIENT
+        const char *str = l.mParameters.params.getPictureFormat();
+        l.mParameters.qtiParams->pictureFormat = l.mParameters.formatStringToEnum(str);
+        if (l.mParameters.qtiParams->pictureFormat == HAL_PIXEL_FORMAT_BLOB) {
+#endif
+
         ALOGV("%s: Camera %d: Starting picture capture", __FUNCTION__, mCameraId);
         int lastJpegStreamId = mJpegProcessor->getStreamId();
         // slowJpegMode will create jpeg stream in CaptureSequencer before capturing
@@ -1560,6 +1593,27 @@ status_t Camera2Client::takePicture(int /*msgType*/) {
                     __FUNCTION__, mCameraId);
             mZslProcessor->clearZslQueue();
         }
+
+#ifdef USE_QTI_CAMERA2CLIENT
+        }
+
+        if (l.mParameters.qtiParams->isRawPlusYuv ||
+                l.mParameters.qtiParams->pictureFormat == HAL_PIXEL_FORMAT_RAW10) {
+            l.mParameters.getMaxRawSize(&l.mParameters.rawpictureWidth,&l.mParameters.rawpictureHeight);
+            l.mParameters.params.setPictureSize(l.mParameters.rawpictureWidth,l.mParameters.rawpictureHeight);
+            ALOGE("%s: Camera %d: Starting Raw capture", __FUNCTION__, mCameraId);
+            int lastRawStreamId = mRawProcessor->getStreamId();
+            if (lastRawStreamId ==  Camera2Client::NO_STREAM) {
+                res = updateProcessorStream(mRawProcessor, l.mParameters); // creating raw stream
+                if (res != OK) {
+                    ALOGE("%s: Camera %d: Can't set up still image stream: %s (%d)",
+                            __FUNCTION__, mCameraId, strerror(-res), res);
+                    return res;
+                }
+            }
+            takePictureCounter = ++l.mParameters.takePictureCounter;
+        }
+#endif
 
         // We should always sync with the device in case flash is turned on,
         // the camera device suggests that flash is needed (AE state FLASH_REQUIRED)
@@ -1995,6 +2049,12 @@ int Camera2Client::getRecordingStreamId() const {
 int Camera2Client::getZslStreamId() const {
     return mZslProcessor->getStreamId();
 }
+
+#ifdef USE_QTI_CAMERA2CLIENT
+int Camera2Client::getRawStreamId() const {
+    return mRawProcessor->getStreamId();
+}
+#endif
 
 status_t Camera2Client::registerFrameListener(int32_t minId, int32_t maxId,
         const wp<camera2::FrameProcessor::FilteredListener>& listener, bool sendPartials) {
