@@ -74,7 +74,7 @@ cc_library_shared {
     ],
 
     product_variables: {
-        lineage: {
+        mokee: {
             uses_generic_camera_parameter_library: {
                 srcs: [
                     "CameraParameters.cpp",
