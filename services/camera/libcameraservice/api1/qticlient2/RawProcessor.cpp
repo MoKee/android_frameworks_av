@@ -178,7 +178,8 @@ status_t RawProcessor::updateStream(const Parameters &params) {
         res = device->createStream(mCaptureWindow,
                 params.rawpictureWidth, params.rawpictureHeight,
                 HAL_PIXEL_FORMAT_RAW10, HAL_DATASPACE_ARBITRARY,
-                CAMERA3_STREAM_ROTATION_0, &mCaptureStreamId);
+                CAMERA3_STREAM_ROTATION_0, &mCaptureStreamId,
+                String8());
         if (res != OK) {
             ALOGE("%s: Camera %d: Can't create output stream for capture: "
                     "%s (%d)", __FUNCTION__, mId,
