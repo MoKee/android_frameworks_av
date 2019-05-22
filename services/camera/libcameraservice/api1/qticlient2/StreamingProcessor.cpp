@@ -496,7 +496,7 @@ status_t StreamingProcessor::startHfrStream(
     // Configure streams for Constrained High Speed mode
     device->configureStreams(true);
 
-    List<const CameraMetadata> requestList;
+    List<const CameraDeviceBase::PhysicalCameraSettingsList> requestList;
     std::list<const SurfaceMap> surfaceMapsList;
     for (size_t i = 0; i < outputStreams.size(); i++) {
         SurfaceMap surfaceMap;
@@ -516,7 +516,9 @@ status_t StreamingProcessor::startHfrStream(
                     __FUNCTION__, mId, strerror(-res), res);
             return res;
         }
-        requestList.push_back(tempRequest);
+        CameraDeviceBase::PhysicalCameraSettingsList physicalSettingsList;
+        physicalSettingsList.push_back({String8::format("%d", mId).string(), tempRequest});
+        requestList.push_back(physicalSettingsList);
 
         camera_metadata_entry streams = tempRequest.find(ANDROID_REQUEST_OUTPUT_STREAMS);
          for (size_t i = 0; i < streams.count; i++) {
