@@ -168,7 +168,8 @@ status_t JpegProcessor::updateStream(const Parameters &params) {
         res = device->createStream(mCaptureWindow,
                 params.pictureWidth, params.pictureHeight,
                 HAL_PIXEL_FORMAT_BLOB, HAL_DATASPACE_V0_JFIF,
-                CAMERA3_STREAM_ROTATION_0, &mCaptureStreamId);
+                CAMERA3_STREAM_ROTATION_0, &mCaptureStreamId,
+                String8());
         if (res != OK) {
             ALOGE("%s: Camera %d: Can't create output stream for capture: "
                     "%s (%d)", __FUNCTION__, mId,
