@@ -44,18 +44,13 @@ struct Parameters;
  * Still image capture output image processing
  */
 class RawProcessor:
-            public Thread, public CpuConsumer::FrameAvailableListener,
-            public camera3::Camera3StreamBufferListener {
+            public Thread, public CpuConsumer::FrameAvailableListener {
   public:
     RawProcessor(sp<Camera2Client> client, wp<CaptureSequencer> sequencer);
     ~RawProcessor();
 
     // CpuConsumer listener implementation
     void onFrameAvailable(const BufferItem& item);
-
-    // Camera3StreamBufferListener implementation
-    void onBufferAcquired(const BufferInfo& bufferInfo) override;
-    void onBufferReleased(const BufferInfo& bufferInfo) override;
 
     status_t updateStream(const Parameters &params);
     status_t deleteStream();
