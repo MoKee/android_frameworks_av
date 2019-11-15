@@ -125,6 +125,7 @@ struct Parameters {
         int32_t high;
     };
 
+    uint8_t aeState; //latest AE state from Hal
     int32_t exposureCompensation;
     bool autoExposureLock;
     bool autoExposureLockAvailable;
