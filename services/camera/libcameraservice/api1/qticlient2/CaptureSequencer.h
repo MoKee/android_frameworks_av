@@ -53,7 +53,7 @@ class CaptureSequencer:
     void setZslProcessor(const wp<ZslProcessor>& processor);
 
     // Begin still image capture
-    status_t startCapture(int msgType);
+    status_t startCapture();
 
     // Wait until current image capture completes; returns immediately if no
     // capture is active. Returns TIMED_OUT if capture does not complete during
@@ -152,7 +152,6 @@ class CaptureSequencer:
     bool mAeInPrecapture;
 
     int32_t mCaptureId;
-    int mMsgType;
 
     // Main internal methods
 
@@ -179,7 +178,7 @@ class CaptureSequencer:
 
     // Emit Shutter/Raw callback to java, and maybe play a shutter sound
     static void shutterNotifyLocked(const Parameters &params,
-            const sp<Camera2Client>& client, int msgType);
+            const sp<Camera2Client>& client);
 };
 
 }; // namespace camera2

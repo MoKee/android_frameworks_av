@@ -56,7 +56,7 @@ class QTICaptureSequencer:
     void setZslProcessor(wp<ZslProcessor> processor);
 
     // Begin still image capture
-    status_t startCapture(int msgType, bool& useQTISequencer);
+    status_t startCapture(bool& useQTISequencer);
 
     // Wait until current image capture completes; returns immediately if no
     // capture is active. Returns TIMED_OUT if capture does not complete during
@@ -163,7 +163,6 @@ class QTICaptureSequencer:
     bool mAeInPrecapture;
 
     int32_t mCaptureId;
-    int mMsgType;
 
     sp<MemoryHeapBase> mCaptureHeap[MAX_BURST_COUNT_PER_SHUTTER];
 
@@ -190,7 +189,7 @@ class QTICaptureSequencer:
 
     // Emit Shutter/Raw callback to java, and maybe play a shutter sound
     static void shutterNotifyLocked(const Parameters &params,
-            sp<Camera2Client> client, int msgType);
+            sp<Camera2Client> client);
 };
 
 }; // namespace camera2

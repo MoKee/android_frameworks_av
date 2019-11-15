@@ -53,8 +53,7 @@ QTICaptureSequencer::QTICaptureSequencer(wp<Camera2Client> client):
         mStateTransitionCount(0),
         mTriggerId(0),
         mTimeoutCount(0),
-        mCaptureId(Camera2Client::kCaptureRequestIdStart),
-        mMsgType(0) {
+        mCaptureId(Camera2Client::kCaptureRequestIdStart) {
     ALOGV("%s", __FUNCTION__);
     mBurstCount = 1;
 }
@@ -72,7 +71,7 @@ void QTICaptureSequencer::setZslProcessor(wp<ZslProcessor> processor) {
     mZslProcessor = processor;
 }
 
-status_t QTICaptureSequencer::startCapture(int msgType, bool& useQTISequencer) {
+status_t QTICaptureSequencer::startCapture(bool& useQTISequencer) {
     ALOGV("%s", __FUNCTION__);
     ATRACE_CALL();
     Mutex::Autolock l(mInputMutex);
@@ -106,7 +105,6 @@ status_t QTICaptureSequencer::startCapture(int msgType, bool& useQTISequencer) {
     }
 
     if (!mStartCapture) {
-        mMsgType = msgType;
         mStartCapture = true;
         mStartCaptureSignal.signal();
     }
@@ -517,7 +515,7 @@ QTICaptureSequencer::CaptureState QTICaptureSequencer::manageZslStart(
 
     SharedParameters::Lock l(client->getParameters());
     /* warning: this also locks a SharedCameraCallbacks */
-    shutterNotifyLocked(l.mParameters, client, mMsgType);
+    shutterNotifyLocked(l.mParameters, client);
     mShutterNotified = true;
     mTimeoutCount = kMaxTimeoutsForCaptureEnd;
     return STANDARD_CAPTURE_WAIT;
@@ -749,7 +747,7 @@ QTICaptureSequencer::CaptureState QTICaptureSequencer::manageStandardCaptureWait
         if (!mShutterNotified) {
             SharedParameters::Lock l(client->getParameters());
             /* warning: this also locks a SharedCameraCallbacks */
-            shutterNotifyLocked(l.mParameters, client, mMsgType);
+            shutterNotifyLocked(l.mParameters, client);
             mShutterNotified = true;
         }
     } else if (mTimeoutCount <= 0) {
@@ -931,12 +929,11 @@ status_t QTICaptureSequencer::updateCaptureRequest(const Parameters &params,
 }
 
 /*static*/ void QTICaptureSequencer::shutterNotifyLocked(const Parameters &params,
-            sp<Camera2Client> client, int msgType) {
+            sp<Camera2Client> client) {
     ATRACE_CALL();
 
     if (params.state == Parameters::STILL_CAPTURE
-        && params.playShutterSound
-        && (msgType & CAMERA_MSG_SHUTTER)) {
+        && params.playShutterSound) {
         client->getCameraService()->playSound(CameraService::SOUND_SHUTTER);
     }
 
