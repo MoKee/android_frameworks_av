@@ -272,7 +272,7 @@ void QTICamera2Client::stopPreviewForRestart(Parameters &params) {
         case Parameters::VIDEO_SNAPSHOT:
         case Parameters::STILL_CAPTURE:
             client->mCaptureSequencer->waitUntilIdle(kStopCaptureTimeout);
-            // no break
+            FALLTHROUGH_INTENDED; // no break
         case Parameters::RECORD:
         case Parameters::PREVIEW:
             client->syncWithDevice();
@@ -302,7 +302,7 @@ void QTICamera2Client::stopPreviewForRestart(Parameters &params) {
                         "stop preview: %s (%d)",
                         __FUNCTION__, client->mCameraId, strerror(-res), res);
             }
-            // no break
+            FALLTHROUGH_INTENDED; // no break
         case Parameters::WAITING_FOR_PREVIEW_WINDOW: {
             params.state = Parameters::STOPPED;
             client->commandStopFaceDetectionL(params);
