@@ -159,7 +159,7 @@ cc_library_shared {
     ],
 
     product_variables: {
-        lineage: {
+        mokee: {
             uses_qti_camera_device: {
                 cppflags: ["-DQTI_CAMERA_DEVICE"],
                 shared_libs: ["vendor.qti.hardware.camera.device@1.0"],
