@@ -250,6 +250,10 @@ DeviceVector Engine::getDevicesForStrategyInt(legacy_strategy strategy,
                         AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES});
                 if (!devices.isEmpty()) break;
             }
+            if (getDpConnAndAllowedForVoice() && isInCall()) {
+                devices = availableOutputDevices.getDevicesFromType(AUDIO_DEVICE_OUT_AUX_DIGITAL);
+                if (!devices.isEmpty()) break;
+            }
             devices = availableOutputDevices.getFirstDevicesFromTypes({
                     AUDIO_DEVICE_OUT_WIRED_HEADPHONE, AUDIO_DEVICE_OUT_WIRED_HEADSET,
                     AUDIO_DEVICE_OUT_LINE, AUDIO_DEVICE_OUT_USB_HEADSET,
@@ -340,6 +344,16 @@ DeviceVector Engine::getDevicesForStrategyInt(legacy_strategy strategy,
                 }
             }
         }
+        // if display-port is connected and being used in voice usecase,
+        // play ringtone over speaker and display-port
+        if ((strategy == STRATEGY_SONIFICATION) && getDpConnAndAllowedForVoice()) {
+            DeviceVector devices2 = availableOutputDevices.getDevicesFromType(
+                    AUDIO_DEVICE_OUT_AUX_DIGITAL);
+            if (!devices2.isEmpty()) {
+                devices.add(devices2);
+                break;
+            }
+        }
         // The second device used for sonification is the same as the device used by media strategy
         FALLTHROUGH_INTENDED;
 
@@ -371,6 +385,13 @@ DeviceVector Engine::getDevicesForStrategyInt(legacy_strategy strategy,
     // FIXME: STRATEGY_REROUTING follow STRATEGY_MEDIA for now
     case STRATEGY_REROUTING:
     case STRATEGY_MEDIA: {
+        if (isInCall() && devices.isEmpty()) {
+            // when in call, get the device for Phone strategy
+            devices = getDevicesForStrategyInt(
+                    STRATEGY_PHONE, availableOutputDevices, availableInputDevices, outputs);
+            break;
+        }
+
         DeviceVector devices2;
         if (strategy != STRATEGY_SONIFICATION) {
             // no sonification on remote submix (e.g. WFD)
@@ -407,7 +428,8 @@ DeviceVector Engine::getDevicesForStrategyInt(legacy_strategy strategy,
                         getLastRemovableMediaDevices(GROUP_WIRED));
             }
         }
-        if ((devices2.isEmpty()) && (strategy != STRATEGY_SONIFICATION)) {
+        if ((devices2.isEmpty()) && (strategy != STRATEGY_SONIFICATION) &&
+                (devices.isEmpty())) {
             // no sonification on aux digital (e.g. HDMI)
             devices2 = availableOutputDevices.getDevicesFromType(AUDIO_DEVICE_OUT_AUX_DIGITAL);
         }
@@ -415,6 +437,12 @@ DeviceVector Engine::getDevicesForStrategyInt(legacy_strategy strategy,
                 (getForceUse(AUDIO_POLICY_FORCE_FOR_DOCK) == AUDIO_POLICY_FORCE_ANALOG_DOCK)) {
             devices2 = availableOutputDevices.getDevicesFromType(
                     AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET);
+        }
+        if ((devices2.isEmpty()) && (strategy != STRATEGY_SONIFICATION) &&
+                (devices.isEmpty())) {
+            // no sonification on WFD sink
+            devices2 = availableOutputDevices.getDevicesFromType(
+                    AUDIO_DEVICE_OUT_PROXY);
         }
         if (devices2.isEmpty()) {
             devices2 = availableOutputDevices.getDevicesFromType(AUDIO_DEVICE_OUT_SPEAKER);
