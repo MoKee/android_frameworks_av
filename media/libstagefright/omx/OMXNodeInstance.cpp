@@ -580,6 +580,10 @@ status_t OMXNodeInstance::freeNode() {
             break;
     }
 
+    if (mActiveBuffers.size() > 0) {
+        freeActiveBuffers();
+    }
+
     Mutex::Autolock _l(mLock);
 
     status_t err = mOwner->freeNode(this);
